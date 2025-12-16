@@ -1,0 +1,687 @@
+<head>
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Balım Acıktı</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#ff9a56">
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            overflow: hidden;
+            font-family: 'Comic Sans MS', 'Arial', sans-serif;
+            background: linear-gradient(135deg, #ffd4a3 0%, #ffb347 50%, #ff9a56 100%);
+        }
+
+        #gameCanvas {
+            display: block;
+            background: linear-gradient(180deg, #87CEEB 0%, #b8dde6 50%, #d4f1f9 100%);
+            cursor: pointer;
+        }
+
+        #ui {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        #score {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 32px;
+            font-weight: bold;
+            color: #ff6b35;
+            text-shadow: 2px 2px 0 #fff, -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff;
+        }
+
+        #gameTitle {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 48px;
+        }
+
+        #meow {
+            position: absolute;
+            bottom: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 48px;
+            font-weight: bold;
+            color: #ff6b35;
+            text-shadow: 3px 3px 0 #fff;
+            display: none;
+            pointer-events: none;
+        }
+
+        @keyframes meowPop {
+            0% { 
+                opacity: 0; 
+                transform: translateX(-50%) translateY(20px) scale(0.8); 
+            }
+            20% { 
+                opacity: 1; 
+                transform: translateX(-50%) translateY(0) scale(1.2); 
+            }
+            80% { 
+                opacity: 1; 
+                transform: translateX(-50%) translateY(0) scale(1); 
+            }
+            100% { 
+                opacity: 0; 
+                transform: translateX(-50%) translateY(-20px) scale(0.8); 
+            }
+        }
+
+        #gameOver {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: #ff1744;
+            display: none;
+        }
+
+        #gameOver h1 {
+            font-size: 42px;
+            text-shadow: 3px 3px 0 #fff;
+            margin-bottom: 15px;
+        }
+
+        #gameOver p {
+            font-size: 24px;
+            color: #ff6b35;
+            text-shadow: 2px 2px 0 #fff;
+            margin-bottom: 20px;
+        }
+
+        #restartBtn {
+            pointer-events: all;
+            padding: 12px 35px;
+            font-size: 20px;
+            background: linear-gradient(135deg, #ff6b35, #ff9a56);
+            border: 3px solid #fff;
+            border-radius: 50px;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 4px 0 #d45a2a;
+            transition: all 0.2s;
+            font-family: 'Comic Sans MS', 'Arial', sans-serif;
+        }
+
+        #restartBtn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 6px 0 #d45a2a;
+        }
+
+        #restartBtn:active {
+            transform: translateY(2px);
+            box-shadow: 0 2px 0 #d45a2a;
+        }
+
+        #instructions {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: #ff6b35;
+            font-size: 26px;
+            text-shadow: 2px 2px 0 #fff;
+            animation: bounce 1.5s ease-in-out infinite;
+        }
+
+        @keyframes bounce {
+            0%, 100% { transform: translate(-50%, -50%); }
+            50% { transform: translate(-50%, -60%); }
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    <div id="ui">
+        <div id="gameTitle">🐱</div>
+        <div id="score">Mama: 0</div>
+        <div id="meow">MİYAV! 😻</div>
+        <div id="instructions">Tıkla ve Mama Topla! 🍖</div>
+        <div id="gameOver">
+            <h1>😿 Balım Aç Kaldı! 😿</h1>
+            <p>Toplanan Mama: <span id="finalScore">0</span> 🍖</p>
+            <button id="restartBtn">Tekrar Oyna 🐾</button>
+        </div>
+    </div>
+
+    <script>
+        const CONFIG = {
+            cat: {
+                width: 50,
+                height: 45,
+                jumpForce: -7,
+                gravity: 0.35
+            },
+            obstacles: {
+                width: 70,
+                gap: 250,
+                speed: 4,
+                spawnInterval: 1800
+            },
+            food: {
+                size: 40,
+                colors: ['#ff6b35', '#f4a261', '#e76f51', '#ff8c42']
+            }
+        };
+
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreEl = document.getElementById('score');
+        const gameOverEl = document.getElementById('gameOver');
+        const finalScoreEl = document.getElementById('finalScore');
+        const restartBtn = document.getElementById('restartBtn');
+        const instructionsEl = document.getElementById('instructions');
+        const meowEl = document.getElementById('meow');
+
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        let gameState = {
+            running: false,
+            started: false,
+            score: 0,
+            cat: null,
+            obstacles: [],
+            foods: [],
+            particles: [],
+            lastObstacleTime: 0,
+            clouds: []
+        };
+
+        class Cat {
+            constructor() {
+                this.x = canvas.width * 0.2;
+                this.y = canvas.height / 2;
+                this.velocity = 0;
+                this.width = CONFIG.cat.width;
+                this.height = CONFIG.cat.height;
+                this.rotation = 0;
+            }
+
+            jump() {
+                this.velocity = CONFIG.cat.jumpForce;
+            }
+
+            update() {
+                this.velocity += CONFIG.cat.gravity;
+                this.y += this.velocity;
+                this.rotation = Math.min(Math.max(this.velocity * 2, -20), 20);
+
+                if (this.y + this.height > canvas.height) {
+                    this.y = canvas.height - this.height;
+                    this.velocity = 0;
+                    endGame();
+                }
+                if (this.y < 0) {
+                    this.y = 0;
+                    this.velocity = 0;
+                }
+            }
+
+            draw() {
+                ctx.save();
+                ctx.translate(this.x + this.width / 2, this.y + this.height / 2);
+                ctx.rotate(this.rotation * Math.PI / 180);
+
+                // Kedi gövdesi (turuncu)
+                ctx.fillStyle = '#ff9a56';
+                ctx.beginPath();
+                ctx.ellipse(0, 5, 22, 18, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Kedi kafası
+                ctx.fillStyle = '#ffb347';
+                ctx.beginPath();
+                ctx.ellipse(0, -8, 18, 16, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Kulaklar
+                ctx.fillStyle = '#ff9a56';
+                ctx.beginPath();
+                ctx.moveTo(-12, -18);
+                ctx.lineTo(-8, -8);
+                ctx.lineTo(-16, -10);
+                ctx.fill();
+                
+                ctx.beginPath();
+                ctx.moveTo(12, -18);
+                ctx.lineTo(8, -8);
+                ctx.lineTo(16, -10);
+                ctx.fill();
+
+                // İç kulak (pembe)
+                ctx.fillStyle = '#ffcccb';
+                ctx.beginPath();
+                ctx.moveTo(-11, -16);
+                ctx.lineTo(-9, -10);
+                ctx.lineTo(-13, -11);
+                ctx.fill();
+                
+                ctx.beginPath();
+                ctx.moveTo(11, -16);
+                ctx.lineTo(9, -10);
+                ctx.lineTo(13, -11);
+                ctx.fill();
+
+                // Gözler
+                ctx.fillStyle = '#2c3e50';
+                ctx.beginPath();
+                ctx.ellipse(-6, -8, 3, 4, 0, 0, Math.PI * 2);
+                ctx.fill();
+                
+                ctx.beginPath();
+                ctx.ellipse(6, -8, 3, 4, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Göz ışıltısı
+                ctx.fillStyle = '#ffffff';
+                ctx.beginPath();
+                ctx.arc(-5, -9, 1.5, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(7, -9, 1.5, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Burun
+                ctx.fillStyle = '#ff6b6b';
+                ctx.beginPath();
+                ctx.moveTo(0, -3);
+                ctx.lineTo(-2, -1);
+                ctx.lineTo(2, -1);
+                ctx.fill();
+
+                // Ağız
+                ctx.strokeStyle = '#2c3e50';
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.moveTo(0, -1);
+                ctx.lineTo(0, 1);
+                ctx.stroke();
+                
+                ctx.beginPath();
+                ctx.arc(-2, 1, 2, 0, Math.PI / 2);
+                ctx.stroke();
+                
+                ctx.beginPath();
+                ctx.arc(2, 1, 2, Math.PI / 2, Math.PI);
+                ctx.stroke();
+
+                // Bıyıklar
+                ctx.strokeStyle = '#2c3e50';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(-8, -5);
+                ctx.lineTo(-18, -6);
+                ctx.moveTo(-8, -3);
+                ctx.lineTo(-18, -3);
+                ctx.moveTo(8, -5);
+                ctx.lineTo(18, -6);
+                ctx.moveTo(8, -3);
+                ctx.lineTo(18, -3);
+                ctx.stroke();
+
+                // Kuyruk
+                ctx.strokeStyle = '#ff9a56';
+                ctx.lineWidth = 8;
+                ctx.lineCap = 'round';
+                ctx.beginPath();
+                ctx.moveTo(-15, 10);
+                ctx.quadraticCurveTo(-25, 15, -20, 0);
+                ctx.stroke();
+
+                // Ayaklar
+                ctx.fillStyle = '#ff9a56';
+                ctx.beginPath();
+                ctx.ellipse(-8, 20, 4, 6, 0, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.ellipse(8, 20, 4, 6, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.restore();
+            }
+        }
+
+        class Obstacle {
+            constructor() {
+                this.x = canvas.width;
+                this.gapY = Math.random() * (canvas.height - CONFIG.obstacles.gap - 150) + 75;
+                this.width = CONFIG.obstacles.width;
+                this.gap = CONFIG.obstacles.gap;
+                this.passed = false;
+            }
+
+            update() {
+                this.x -= CONFIG.obstacles.speed;
+            }
+
+            draw() {
+                // Çit çizimi (üst)
+                ctx.fillStyle = '#8b4513';
+                ctx.fillRect(this.x, 0, this.width, this.gapY);
+                
+                // Çit detayları
+                ctx.fillStyle = '#654321';
+                for (let i = 0; i < this.gapY; i += 30) {
+                    ctx.fillRect(this.x + 5, i, 15, 25);
+                    ctx.fillRect(this.x + 30, i, 15, 25);
+                    ctx.fillRect(this.x + 55, i, 15, 25);
+                }
+
+                // Çit çizimi (alt)
+                ctx.fillStyle = '#8b4513';
+                ctx.fillRect(this.x, this.gapY + this.gap, this.width, canvas.height - this.gapY - this.gap);
+                
+                for (let i = this.gapY + this.gap; i < canvas.height; i += 30) {
+                    ctx.fillStyle = '#654321';
+                    ctx.fillRect(this.x + 5, i, 15, 25);
+                    ctx.fillRect(this.x + 30, i, 15, 25);
+                    ctx.fillRect(this.x + 55, i, 15, 25);
+                }
+            }
+
+            checkCollision(cat) {
+                if (cat.x + cat.width - 10 > this.x && 
+                    cat.x + 10 < this.x + this.width) {
+                    if (cat.y < this.gapY || 
+                        cat.y + cat.height > this.gapY + this.gap) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+
+            isOffScreen() {
+                return this.x + this.width < 0;
+            }
+
+            checkPassed(cat) {
+                if (!this.passed && cat.x > this.x + this.width) {
+                    this.passed = true;
+                    return true;
+                }
+                return false;
+            }
+        }
+
+        class Food {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.size = CONFIG.food.size;
+                this.collected = false;
+                this.rotation = 0;
+            }
+
+            update() {
+                this.x -= CONFIG.obstacles.speed;
+                this.rotation += 0.1;
+            }
+
+            draw() {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.rotate(this.rotation);
+
+                // Mama (kemik şeklinde)
+                ctx.fillStyle = '#d4a373';
+                
+                // Sol yuvarlak
+                ctx.beginPath();
+                ctx.arc(-12, 0, 6, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Orta dikdörtgen
+                ctx.fillRect(-12, -3, 24, 6);
+                
+                // Sağ yuvarlak
+                ctx.beginPath();
+                ctx.arc(12, 0, 6, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Gölge efekti
+                ctx.strokeStyle = '#8b6f47';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(-12, 0, 6, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.arc(12, 0, 6, 0, Math.PI * 2);
+                ctx.stroke();
+
+                ctx.restore();
+            }
+
+            checkCollection(cat) {
+                const distance = Math.sqrt(
+                    Math.pow(cat.x + cat.width / 2 - this.x, 2) + 
+                    Math.pow(cat.y + cat.height / 2 - this.y, 2)
+                );
+                return distance < (cat.width / 2 + this.size / 2);
+            }
+        }
+
+        class Cloud {
+            constructor() {
+                this.x = Math.random() * canvas.width;
+                this.y = Math.random() * canvas.height * 0.6;
+                this.width = Math.random() * 80 + 60;
+                this.height = this.width * 0.6;
+                this.speed = Math.random() * 0.5 + 0.3;
+            }
+
+            update() {
+                this.x += this.speed;
+                if (this.x > canvas.width + this.width) {
+                    this.x = -this.width;
+                }
+            }
+
+            draw() {
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.width * 0.3, 0, Math.PI * 2);
+                ctx.arc(this.x + this.width * 0.3, this.y - this.height * 0.2, this.width * 0.35, 0, Math.PI * 2);
+                ctx.arc(this.x + this.width * 0.6, this.y, this.width * 0.3, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        function showMeow() {
+            meowEl.style.display = 'block';
+            meowEl.style.animation = 'meowPop 0.8s ease-out';
+            
+            setTimeout(() => {
+                meowEl.style.display = 'none';
+            }, 800);
+        }
+
+        function init() {
+            gameState = {
+                running: false,
+                started: false,
+                score: 0,
+                cat: new Cat(),
+                obstacles: [],
+                foods: [],
+                particles: [],
+                lastObstacleTime: 0,
+                clouds: []
+            };
+            
+            for (let i = 0; i < 5; i++) {
+                gameState.clouds.push(new Cloud());
+            }
+            
+            scoreEl.textContent = 'Mama: 0';
+            gameOverEl.style.display = 'none';
+            instructionsEl.style.display = 'block';
+        }
+
+        function startGame() {
+            if (!gameState.started) {
+                gameState.started = true;
+                gameState.running = true;
+                instructionsEl.style.display = 'none';
+            }
+        }
+
+        function endGame() {
+            if (!gameState.running) return;
+            gameState.running = false;
+            finalScoreEl.textContent = gameState.score;
+            gameOverEl.style.display = 'block';
+        }
+
+        function updateScore() {
+            gameState.score++;
+            scoreEl.textContent = 'Mama: ' + gameState.score;
+            showMeow();
+        }
+
+        function update(timestamp) {
+            gameState.clouds.forEach(cloud => cloud.update());
+
+            if (gameState.running) {
+                gameState.cat.update();
+
+                if (timestamp - gameState.lastObstacleTime > CONFIG.obstacles.spawnInterval) {
+                    const obstacle = new Obstacle();
+                    gameState.obstacles.push(obstacle);
+                    const food = new Food(
+                        obstacle.x + obstacle.width / 2, 
+                        obstacle.gapY + obstacle.gap / 2
+                    );
+                    gameState.foods.push(food);
+                    gameState.lastObstacleTime = timestamp;
+                }
+
+                gameState.obstacles.forEach((obstacle, index) => {
+                    obstacle.update();
+                    
+                    if (obstacle.checkCollision(gameState.cat)) {
+                        endGame();
+                    }
+                    
+                    if (obstacle.checkPassed(gameState.cat)) {
+                        updateScore();
+                    }
+                    
+                    if (obstacle.isOffScreen()) {
+                        gameState.obstacles.splice(index, 1);
+                    }
+                });
+
+                gameState.foods.forEach((food, index) => {
+                    food.update();
+                    
+                    if (!food.collected && food.checkCollection(gameState.cat)) {
+                        food.collected = true;
+                    }
+                    
+                    if (food.x + food.size < 0) {
+                        gameState.foods.splice(index, 1);
+                    }
+                });
+            }
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Gökyüzü gradyanı
+            const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+            gradient.addColorStop(0, '#87CEEB');
+            gradient.addColorStop(1, '#d4f1f9');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Bulutlar
+            gameState.clouds.forEach(cloud => cloud.draw());
+
+            // Güneş
+            ctx.fillStyle = '#FFD700';
+            ctx.beginPath();
+            ctx.arc(canvas.width - 100, 80, 40, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Zemin çizgisi
+            ctx.fillStyle = '#90EE90';
+            ctx.fillRect(0, canvas.height - 20, canvas.width, 20);
+
+            gameState.obstacles.forEach(obstacle => obstacle.draw());
+            gameState.foods.forEach(food => {
+                if (!food.collected) food.draw();
+            });
+
+            if (gameState.cat) {
+                gameState.cat.draw();
+            }
+        }
+
+        function gameLoop(timestamp) {
+            update(timestamp);
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        canvas.addEventListener('click', () => {
+            if (!gameState.started) {
+                startGame();
+            }
+            if (gameState.running) {
+                gameState.cat.jump();
+            }
+        });
+
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            if (!gameState.started) {
+                startGame();
+            }
+            if (gameState.running) {
+                gameState.cat.jump();
+            }
+        });
+
+        restartBtn.addEventListener('click', () => {
+            init();
+        });
+
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            if (gameState.cat) {
+                gameState.cat.y = Math.min(gameState.cat.y, canvas.height - gameState.cat.height);
+            }
+        });
+
+        init();
+        requestAnimationFrame(gameLoop);
+    </script>
+</body>
+</html>
